@@ -16,3 +16,7 @@ AGENTS.md
 .cxx
 local.properties
 /AGENTS.md
+
+# Gradle and Kotlin build output in every module, including nested build-logic projects
+**/build/
+.kotlin/
