@@ -47,6 +47,7 @@ import com.unknownrex.sensa.core.designsystem.component.ShimmerTransactionRows
 import com.unknownrex.sensa.core.designsystem.component.TransactionRow
 import com.unknownrex.sensa.core.designsystem.glass.GlassBox
 import com.unknownrex.sensa.core.designsystem.icon.CategoryIcons
+import com.unknownrex.sensa.core.designsystem.component.SensaMark
 import com.unknownrex.sensa.core.designsystem.theme.LocalSensaColors
 import com.unknownrex.sensa.core.designsystem.theme.SensaSpacing
 import com.unknownrex.sensa.core.designsystem.theme.SensaTheme
@@ -236,11 +237,17 @@ private fun MonthHeader(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Text(
-            text = "Sensa",
-            style = MaterialTheme.typography.headlineMedium,
-            color = colors.onSurface,
-        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(SensaSpacing.sm),
+        ) {
+            SensaMark(size = 32.dp, contentDescription = null)
+            Text(
+                text = "Sensa",
+                style = MaterialTheme.typography.headlineMedium,
+                color = colors.onSurface,
+            )
+        }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(
                 imageVector = Icons.Outlined.ChevronLeft,
