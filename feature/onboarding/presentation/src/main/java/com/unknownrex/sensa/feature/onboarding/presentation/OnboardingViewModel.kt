@@ -12,7 +12,7 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-enum class OnboardingStep { Welcome, Permission, Ready }
+enum class OnboardingStep { Welcome, Permission, Notify, Ready }
 
 /** What Sensa can tell the user about capture before it ever asks for the permission. */
 data class OnboardingState(
@@ -24,11 +24,13 @@ sealed interface OnboardingAction {
     data object OnNext : OnboardingAction
     data object OnBack : OnboardingAction
     data object OnGrantAccess : OnboardingAction
+    data class OnNotifyChoice(val enabled: Boolean) : OnboardingAction
     data object OnFinish : OnboardingAction
 }
 
 sealed interface OnboardingEvent {
     data object OpenNotificationSettings : OnboardingEvent
+    data object RequestNotificationPermission : OnboardingEvent
     data object Finished : OnboardingEvent
 }
 
@@ -58,6 +60,12 @@ class OnboardingViewModel(
                 _events.send(OnboardingEvent.OpenNotificationSettings)
             }
 
+            is OnboardingAction.OnNotifyChoice -> viewModelScope.launch {
+                settingsRepository.setNotifyOnCapture(action.enabled)
+                if (action.enabled) _events.send(OnboardingEvent.RequestNotificationPermission)
+                _state.update { it.copy(step = it.step.next()) }
+            }
+
             OnboardingAction.OnFinish -> viewModelScope.launch {
                 settingsRepository.setOnboardingCompleted(true)
                 _events.send(OnboardingEvent.Finished)
@@ -68,12 +76,14 @@ class OnboardingViewModel(
 
 private fun OnboardingStep.next(): OnboardingStep = when (this) {
     OnboardingStep.Welcome -> OnboardingStep.Permission
-    OnboardingStep.Permission -> OnboardingStep.Ready
+    OnboardingStep.Permission -> OnboardingStep.Notify
+    OnboardingStep.Notify -> OnboardingStep.Ready
     OnboardingStep.Ready -> OnboardingStep.Ready
 }
 
 private fun OnboardingStep.previous(): OnboardingStep = when (this) {
     OnboardingStep.Welcome -> OnboardingStep.Welcome
     OnboardingStep.Permission -> OnboardingStep.Welcome
-    OnboardingStep.Ready -> OnboardingStep.Permission
+    OnboardingStep.Notify -> OnboardingStep.Permission
+    OnboardingStep.Ready -> OnboardingStep.Notify
 }

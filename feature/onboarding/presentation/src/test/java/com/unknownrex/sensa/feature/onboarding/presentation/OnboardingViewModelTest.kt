@@ -1,7 +1,9 @@
 package com.unknownrex.sensa.feature.onboarding.presentation
 
 import assertk.assertThat
+import app.cash.turbine.test
 import assertk.assertions.isEqualTo
+import assertk.assertions.isFalse
 import assertk.assertions.isTrue
 import com.unknownrex.sensa.core.domain.model.PaymentSource
 import com.unknownrex.sensa.core.domain.model.SensaSettings
@@ -46,11 +48,40 @@ class OnboardingViewModelTest {
         assertThat(viewModel.state.value.step).isEqualTo(OnboardingStep.Permission)
 
         viewModel.onAction(OnboardingAction.OnNext)
+        assertThat(viewModel.state.value.step).isEqualTo(OnboardingStep.Notify)
+
+        viewModel.onAction(OnboardingAction.OnNext)
         viewModel.onAction(OnboardingAction.OnNext)
         assertThat(viewModel.state.value.step).isEqualTo(OnboardingStep.Ready)
 
         viewModel.onAction(OnboardingAction.OnBack)
-        assertThat(viewModel.state.value.step).isEqualTo(OnboardingStep.Permission)
+        assertThat(viewModel.state.value.step).isEqualTo(OnboardingStep.Notify)
+    }
+
+    @Test
+    fun `accepting notifications stores the choice and requests permission`() = runTest {
+        val viewModel = viewModel()
+        repeat(2) { viewModel.onAction(OnboardingAction.OnNext) }
+
+        viewModel.events.test {
+            viewModel.onAction(OnboardingAction.OnNotifyChoice(enabled = true))
+            assertThat(awaitItem()).isEqualTo(OnboardingEvent.RequestNotificationPermission)
+        }
+        assertThat(settings.settings.value.notifyOnCapture).isTrue()
+        assertThat(viewModel.state.value.step).isEqualTo(OnboardingStep.Ready)
+    }
+
+    @Test
+    fun `declining notifications stores false and skips the permission`() = runTest {
+        val viewModel = viewModel()
+        repeat(2) { viewModel.onAction(OnboardingAction.OnNext) }
+
+        viewModel.events.test {
+            viewModel.onAction(OnboardingAction.OnNotifyChoice(enabled = false))
+            expectNoEvents()
+        }
+        assertThat(settings.settings.value.notifyOnCapture).isFalse()
+        assertThat(viewModel.state.value.step).isEqualTo(OnboardingStep.Ready)
     }
 
     @Test
@@ -97,6 +128,10 @@ class OnboardingViewModelTest {
 
         override suspend fun setReduceMotion(enabled: Boolean) {
             settings.value = settings.value.copy(reduceMotion = enabled)
+        }
+
+        override suspend fun setNotifyOnCapture(enabled: Boolean) {
+            settings.value = settings.value.copy(notifyOnCapture = enabled)
         }
     }
 }

@@ -1,7 +1,11 @@
 package com.unknownrex.sensa.feature.onboarding.presentation
 
+import android.Manifest
 import android.content.Intent
+import android.os.Build
 import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts.RequestPermission
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -29,6 +33,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.unknownrex.sensa.core.designsystem.component.SensaCard
+import com.unknownrex.sensa.core.designsystem.component.SensaMark
 import com.unknownrex.sensa.core.designsystem.component.SensaPrimaryButton
 import com.unknownrex.sensa.core.designsystem.component.SensaSecondaryButton
 import com.unknownrex.sensa.core.designsystem.theme.LocalSensaColors
@@ -45,6 +50,8 @@ fun OnboardingRoot(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    // The result is not needed: CaptureNotifier checks areNotificationsEnabled() before posting.
+    val permissionLauncher = rememberLauncherForActivityResult(RequestPermission()) {}
 
     ObserveAsEvents(viewModel.events) { event ->
         when (event) {
@@ -52,6 +59,11 @@ fun OnboardingRoot(
                 Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             )
+
+            OnboardingEvent.RequestNotificationPermission ->
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                }
 
             OnboardingEvent.Finished -> onFinished()
         }
@@ -80,6 +92,7 @@ fun OnboardingScreen(
             when (state.step) {
                 OnboardingStep.Welcome -> WelcomeStep()
                 OnboardingStep.Permission -> PermissionStep(installedApps = state.installedApps)
+                OnboardingStep.Notify -> NotifyStep()
                 OnboardingStep.Ready -> ReadyStep()
             }
         }
@@ -110,6 +123,21 @@ fun OnboardingScreen(
                         ) {
                             Text(text = "Get started", style = MaterialTheme.typography.labelLarge)
                         }
+                    }
+                }
+
+                OnboardingStep.Notify -> {
+                    SensaPrimaryButton(
+                        onClick = { onAction(OnboardingAction.OnNotifyChoice(enabled = true)) },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(text = "Yes, notify me", style = MaterialTheme.typography.labelLarge)
+                    }
+                    SensaSecondaryButton(
+                        onClick = { onAction(OnboardingAction.OnNotifyChoice(enabled = false)) },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(text = "No thanks", style = MaterialTheme.typography.labelLarge)
                     }
                 }
 
@@ -149,19 +177,7 @@ private fun WelcomeStep() {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(SensaSpacing.md),
     ) {
-        Box(
-            modifier = Modifier
-                .size(96.dp)
-                .clip(CircleShape)
-                .background(colors.primary.copy(alpha = 0.14f)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = "Rp",
-                style = MaterialTheme.typography.displayMedium,
-                color = colors.primary,
-            )
-        }
+        SensaMark(size = 96.dp)
         Text(
             text = "Sensa",
             style = MaterialTheme.typography.displayLarge,
@@ -239,6 +255,35 @@ private fun PermissionStep(installedApps: List<InstalledPaymentApp>) {
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun NotifyStep() {
+    val colors = LocalSensaColors.current
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(SensaSpacing.md),
+    ) {
+        Icon(
+            imageVector = Icons.Outlined.NotificationsActive,
+            contentDescription = null,
+            tint = colors.primary,
+            modifier = Modifier.size(48.dp),
+        )
+        Text(
+            text = "Get notified?",
+            style = MaterialTheme.typography.headlineMedium,
+            color = colors.onSurface,
+            textAlign = TextAlign.Center,
+        )
+        Text(
+            text = "Sensa can send you a notification each time a spending is added, so you " +
+                "know it was recorded. You can change this later in Settings.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = colors.onSurfaceMuted,
+            textAlign = TextAlign.Center,
+        )
     }
 }
 
