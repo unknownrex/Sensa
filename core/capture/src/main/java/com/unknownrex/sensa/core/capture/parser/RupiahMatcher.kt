@@ -3,25 +3,21 @@ package com.unknownrex.sensa.core.capture.parser
 /**
  * Shared amount/merchant extraction for rupiah payment notifications.
  *
- * Amounts are always whole rupiah: `Rp25.000` and `Rp25,000` both become `25000`.
+ * Amounts are always whole rupiah: `Rp25.000`, `Rp25,000` and `IDR 25,000.00` all become `25000`.
  */
 internal object RupiahMatcher {
 
-    private val amountRegex = Regex("""(?i)\bRp\.?\s*([0-9][0-9.,]*)""")
+    private val amountRegex = Regex("""(?i)\b(?:Rp|IDR)\.?\s*([0-9][0-9.,]*)""")
+    private val centsSuffix = Regex("""[.,][0-9]{2}$""")
+
+    // Commas are allowed inside names ("Reyx, Digital & Kreatif"); a sentence-ending dot is not.
+    private const val NAME = """([A-Za-z0-9.,'&\- ]{3,60}?)"""
+    private const val END = """(?=\.(?:\s|$)|\s+sebesar|\s+senilai|\s+berhasil|\s+pada|$)"""
 
     private val merchantPatterns = listOf(
-        Regex(
-            """(?i)\bke\s+([A-Za-z0-9.'\- ]{3,60}?)""" +
-                """(?=\.|,|\s+sebesar|\s+senilai|\s+berhasil|\s+pada|$)""",
-        ),
-        Regex(
-            """(?i)\bdi\s+([A-Za-z0-9.'\- ]{3,60}?)""" +
-                """(?=\.|,|\s+sebesar|\s+senilai|\s+berhasil|\s+pada|$)""",
-        ),
-        Regex(
-            """(?i)\bdari\s+([A-Za-z0-9.'\- ]{3,60}?)""" +
-                """(?=\.|,|\s+sebesar|\s+senilai|\s+berhasil|$)""",
-        ),
+        Regex("""(?i)\bke\s+$NAME$END"""),
+        Regex("""(?i)\bdi\s+$NAME$END"""),
+        Regex("""(?i)\bdari\s+$NAME$END"""),
     )
 
     /** Words that show up near a merchant but are never the merchant itself. */
@@ -32,7 +28,8 @@ internal object RupiahMatcher {
 
     fun amountOrNull(text: String): Long? {
         val match = amountRegex.find(text) ?: return null
-        val digits = match.groupValues[1].filter { it.isDigit() }
+        val raw = match.groupValues[1].trimEnd('.', ',').replace(centsSuffix, "")
+        val digits = raw.filter { it.isDigit() }
         if (digits.isEmpty() || digits.length > 12) return null
         return digits.toLongOrNull()?.takeIf { it > 0L }
     }

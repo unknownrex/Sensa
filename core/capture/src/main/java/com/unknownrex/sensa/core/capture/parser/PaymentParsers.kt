@@ -70,7 +70,10 @@ class BcaMobileParser : NotificationParser {
         if (!isPayment(text)) return null
 
         val amount = RupiahMatcher.amountOrNull(text) ?: return null
-        val merchant = RupiahMatcher.merchantOrNull(text) ?: return null
+        // "Catatan Finansial" notifications carry no merchant, only BCA's own category.
+        val merchant = CategoryRegex.find(text)?.groupValues?.get(1)
+            ?: RupiahMatcher.merchantOrNull(text)
+            ?: return null
 
         return ParsedTransaction(
             amountRupiah = amount,
@@ -85,7 +88,9 @@ class BcaMobileParser : NotificationParser {
         PaymentKeywords.any { text.contains(it, ignoreCase = true) }
 
     private companion object {
+        val CategoryRegex = Regex("""(?i)\bdi kategori\s+([A-Za-z0-9&' -]{2,40}?)\.?$""")
         val PaymentKeywords = listOf(
+            "pengeluaran sebesar",
             "transaksi berhasil",
             "pembayaran berhasil",
             "transfer berhasil",

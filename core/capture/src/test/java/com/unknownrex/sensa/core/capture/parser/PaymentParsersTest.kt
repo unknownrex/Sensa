@@ -10,16 +10,48 @@ import com.unknownrex.sensa.core.domain.model.PaymentSource
 import org.junit.jupiter.api.Test
 
 /**
- * PROVISIONAL SAMPLES.
- *
- * These strings mirror the notification shapes the parsers are written against. They must be
- * replaced with real redacted notifications from `.agents/samples/gopay/` and
- * `.agents/samples/bca/` before this feature can be trusted.
+ * The `real ...` tests use notifications captured from a device. The rest are invented shapes
+ * kept as regression checks.
  */
 class PaymentParsersTest {
 
     private val goPay = GoPayParser()
     private val bca = BcaMobileParser()
+
+    // Real notifications captured from a device on 2026-11-02 (dumpsys notification).
+    @Test
+    fun `real GoPay QRIS payment keeps comma in merchant`() {
+        val text = "Mantaap, kamu barusan bayar Rp5.000 ke Reyx, Digital & Kreatif."
+        val parsed = goPay.parse(
+            NotificationSnapshot(PaymentApps.GOPAY, "Pembayaran berhasil!", text, text, 1_000_000L),
+        )
+
+        assertThat(parsed).isNotNull()
+        assertThat(parsed!!.amountRupiah).isEqualTo(5_000L)
+        assertThat(parsed.merchant).isEqualTo("Reyx, Digital & Kreatif")
+        assertThat(parsed.isTransfer).isEqualTo(false)
+    }
+
+    @Test
+    fun `real BCA Catatan Finansial uses IDR amount and BCA category`() {
+        val text = "Pengeluaran sebesar IDR 15,000.00 di kategori Makanan."
+        val parsed = bca.parse(
+            NotificationSnapshot(PaymentApps.BCA_MOBILE, "Catatan Finansial", text, text, 1_000_000L),
+        )
+
+        assertThat(parsed).isNotNull()
+        assertThat(parsed!!.amountRupiah).isEqualTo(15_000L)
+        assertThat(parsed.merchant).isEqualTo("Makanan")
+        assertThat(parsed.source).isEqualTo(PaymentSource.BCA_MOBILE)
+    }
+
+    @Test
+    fun `IDR amount drops cents instead of multiplying by 100`() {
+        val parsed = bca.parse(bca("Pengeluaran sebesar IDR 1,000.00 di kategori Pembayaran."))
+
+        assertThat(parsed!!.amountRupiah).isEqualTo(1_000L)
+        assertThat(parsed.merchant).isEqualTo("Pembayaran")
+    }
 
     @Test
     fun `GoPay payment extracts amount and merchant`() {
