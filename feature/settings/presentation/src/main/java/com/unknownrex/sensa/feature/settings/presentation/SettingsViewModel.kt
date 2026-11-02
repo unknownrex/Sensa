@@ -16,6 +16,8 @@ import kotlinx.coroutines.launch
 data class SettingsState(
     val settings: SensaSettings = SensaSettings(),
     val notificationAccessEnabled: Boolean = false,
+    /** Access granted but Android isn't delivering notifications (stale binding after an update). */
+    val captureDisconnected: Boolean = false,
     val appVersion: String = "",
     val isLoading: Boolean = true,
 )
@@ -24,12 +26,15 @@ sealed interface SettingsAction {
     data class OnDynamicColorChange(val enabled: Boolean) : SettingsAction
     data class OnReduceTransparencyChange(val enabled: Boolean) : SettingsAction
     data class OnReduceMotionChange(val enabled: Boolean) : SettingsAction
+    data class OnNotifyOnCaptureChange(val enabled: Boolean) : SettingsAction
     data object OnOpenNotificationSettings : SettingsAction
     data object OnRefreshNotificationAccess : SettingsAction
+    data object OnReconnectCapture : SettingsAction
 }
 
 sealed interface SettingsEvent {
     data object OpenNotificationSettings : SettingsEvent
+    data object RequestNotificationPermission : SettingsEvent
 }
 
 class SettingsViewModel(
@@ -52,7 +57,9 @@ class SettingsViewModel(
                 _state.update { it.copy(settings = settings, isLoading = false) }
             }
         }
-        refreshNotificationAccess()
+        viewModelScope.launch {
+            notificationAccessChecker.connected.collect { refreshNotificationAccess() }
+        }
     }
 
     fun onAction(action: SettingsAction) {
@@ -69,17 +76,28 @@ class SettingsViewModel(
                 settingsRepository.setReduceMotion(action.enabled)
             }
 
+            is SettingsAction.OnNotifyOnCaptureChange -> viewModelScope.launch {
+                settingsRepository.setNotifyOnCapture(action.enabled)
+                if (action.enabled) _events.send(SettingsEvent.RequestNotificationPermission)
+            }
+
             SettingsAction.OnOpenNotificationSettings -> viewModelScope.launch {
                 _events.send(SettingsEvent.OpenNotificationSettings)
             }
 
             SettingsAction.OnRefreshNotificationAccess -> refreshNotificationAccess()
+
+            SettingsAction.OnReconnectCapture -> notificationAccessChecker.reconnectIfNeeded()
         }
     }
 
     private fun refreshNotificationAccess() {
+        val enabled = notificationAccessChecker.isEnabled()
         _state.update {
-            it.copy(notificationAccessEnabled = notificationAccessChecker.isEnabled())
+            it.copy(
+                notificationAccessEnabled = enabled,
+                captureDisconnected = enabled && !notificationAccessChecker.connected.value,
+            )
         }
     }
 }

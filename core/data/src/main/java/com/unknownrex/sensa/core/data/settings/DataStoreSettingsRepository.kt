@@ -27,7 +27,12 @@ class DataStoreSettingsRepository(
             dynamicColor = prefs[Keys.DynamicColor] ?: false,
             reduceTransparency = prefs[Keys.ReduceTransparency] ?: false,
             reduceMotion = prefs[Keys.ReduceMotion] ?: false,
+            notifyOnCapture = prefs[Keys.NotifyOnCapture] ?: true,
         )
+    }
+
+    override suspend fun setNotifyOnCapture(enabled: Boolean) {
+        dataStore.edit { it[Keys.NotifyOnCapture] = enabled }
     }
 
     override suspend fun setOnboardingCompleted(completed: Boolean) {
@@ -51,5 +56,6 @@ class DataStoreSettingsRepository(
         val DynamicColor = booleanPreferencesKey("dynamic_color")
         val ReduceTransparency = booleanPreferencesKey("reduce_transparency")
         val ReduceMotion = booleanPreferencesKey("reduce_motion")
+        val NotifyOnCapture = booleanPreferencesKey("notify_on_capture")
     }
 }

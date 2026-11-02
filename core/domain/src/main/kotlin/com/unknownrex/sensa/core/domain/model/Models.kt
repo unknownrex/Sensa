@@ -64,4 +64,6 @@ data class SensaSettings(
     val dynamicColor: Boolean = false,
     val reduceTransparency: Boolean = false,
     val reduceMotion: Boolean = false,
+    /** Post a Sensa notification each time a payment is captured. */
+    val notifyOnCapture: Boolean = true,
 )

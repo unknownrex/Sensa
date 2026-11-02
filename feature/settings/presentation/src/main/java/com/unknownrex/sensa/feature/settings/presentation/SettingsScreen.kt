@@ -1,7 +1,11 @@
 package com.unknownrex.sensa.feature.settings.presentation
 
+import android.Manifest
 import android.content.Intent
+import android.os.Build
 import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts.RequestPermission
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -31,6 +35,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.unknownrex.sensa.core.designsystem.component.SensaCard
+import com.unknownrex.sensa.core.designsystem.component.SensaPrimaryButton
 import com.unknownrex.sensa.core.designsystem.component.SensaSecondaryButton
 import com.unknownrex.sensa.core.designsystem.theme.LocalSensaColors
 import com.unknownrex.sensa.core.designsystem.theme.SensaSpacing
@@ -43,6 +48,8 @@ fun SettingsRoot(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    // The result is not needed: CaptureNotifier checks areNotificationsEnabled() before posting.
+    val permissionLauncher = rememberLauncherForActivityResult(RequestPermission()) {}
 
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         viewModel.onAction(SettingsAction.OnRefreshNotificationAccess)
@@ -56,6 +63,11 @@ fun SettingsRoot(
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
                 )
             }
+
+            SettingsEvent.RequestNotificationPermission ->
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                }
         }
     }
 
@@ -107,7 +119,11 @@ fun SettingsScreen(
                                 .size(10.dp)
                                 .clip(CircleShape)
                                 .background(
-                                    if (state.notificationAccessEnabled) colors.success else colors.warning,
+                                    if (state.notificationAccessEnabled && !state.captureDisconnected) {
+                                        colors.success
+                                    } else {
+                                        colors.warning
+                                    },
                                 ),
                         )
                         Column(modifier = Modifier.weight(1f)) {
@@ -117,14 +133,25 @@ fun SettingsScreen(
                                 color = colors.onSurface,
                             )
                             Text(
-                                text = if (state.notificationAccessEnabled) {
-                                    "Enabled — payments are captured on this device."
-                                } else {
-                                    "Off — Sensa cannot read GoPay or BCA notifications yet."
+                                text = when {
+                                    !state.notificationAccessEnabled ->
+                                        "Off — Sensa cannot read GoPay or BCA notifications yet."
+                                    state.captureDisconnected ->
+                                        "Disconnected — Android isn't sending payments to Sensa. " +
+                                            "Tap Reconnect. If that doesn't work, turn access off and on."
+                                    else -> "Enabled — payments are captured on this device."
                                 },
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = colors.onSurfaceMuted,
                             )
+                        }
+                    }
+                    if (state.captureDisconnected) {
+                        SensaPrimaryButton(
+                            onClick = { onAction(SettingsAction.OnReconnectCapture) },
+                            modifier = Modifier.fillMaxWidth().padding(bottom = SensaSpacing.xs),
+                        ) {
+                            Text(text = "Reconnect", style = MaterialTheme.typography.labelLarge)
                         }
                     }
                     SensaSecondaryButton(
@@ -136,6 +163,16 @@ fun SettingsScreen(
                             style = MaterialTheme.typography.labelLarge,
                         )
                     }
+                    HorizontalDivider(
+                        color = colors.outline.copy(alpha = 0.4f),
+                        modifier = Modifier.padding(top = SensaSpacing.sm),
+                    )
+                    SettingsSwitchRow(
+                        title = "Notify when spending is added",
+                        subtitle = "Get a notification each time Sensa records a payment.",
+                        checked = state.settings.notifyOnCapture,
+                        onCheckedChange = { onAction(SettingsAction.OnNotifyOnCaptureChange(it)) },
+                    )
                 }
             }
         }

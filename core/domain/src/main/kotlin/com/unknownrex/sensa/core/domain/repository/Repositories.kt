@@ -60,4 +60,6 @@ interface SettingsRepository {
     suspend fun setReduceTransparency(enabled: Boolean)
 
     suspend fun setReduceMotion(enabled: Boolean)
+
+    suspend fun setNotifyOnCapture(enabled: Boolean)
 }
