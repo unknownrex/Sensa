@@ -5,6 +5,7 @@ import app.cash.turbine.test
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isTrue
+import com.unknownrex.sensa.core.capture.CaptureAccessChecks
 import com.unknownrex.sensa.core.domain.model.PaymentSource
 import com.unknownrex.sensa.core.domain.model.SensaSettings
 import com.unknownrex.sensa.core.domain.repository.SettingsRepository
@@ -26,6 +27,7 @@ import org.junit.jupiter.api.Test
 class OnboardingViewModelTest {
 
     private val settings = FakeSettingsRepository()
+    private val checks = FakeAccessChecks()
 
     @BeforeEach
     fun setUp() {
@@ -48,6 +50,9 @@ class OnboardingViewModelTest {
         assertThat(viewModel.state.value.step).isEqualTo(OnboardingStep.Permission)
 
         viewModel.onAction(OnboardingAction.OnNext)
+        assertThat(viewModel.state.value.step).isEqualTo(OnboardingStep.Battery)
+
+        viewModel.onAction(OnboardingAction.OnNext)
         assertThat(viewModel.state.value.step).isEqualTo(OnboardingStep.Notify)
 
         viewModel.onAction(OnboardingAction.OnNext)
@@ -59,9 +64,46 @@ class OnboardingViewModelTest {
     }
 
     @Test
-    fun `accepting notifications stores the choice and requests permission`() = runTest {
+    fun `granting notification access on resume advances to the battery step`() {
+        val viewModel = viewModel()
+        viewModel.onAction(OnboardingAction.OnNext)
+
+        checks.access = true
+        viewModel.onAction(OnboardingAction.OnRefreshAccess)
+
+        assertThat(viewModel.state.value.step).isEqualTo(OnboardingStep.Battery)
+        assertThat(viewModel.state.value.accessGranted).isTrue()
+    }
+
+    @Test
+    fun `granting the battery exemption on resume advances to the notify step`() {
         val viewModel = viewModel()
         repeat(2) { viewModel.onAction(OnboardingAction.OnNext) }
+
+        checks.battery = true
+        viewModel.onAction(OnboardingAction.OnRefreshAccess)
+
+        assertThat(viewModel.state.value.step).isEqualTo(OnboardingStep.Notify)
+        assertThat(viewModel.state.value.batteryUnrestricted).isTrue()
+    }
+
+    @Test
+    fun `resume without a grant does not advance twice`() {
+        val viewModel = viewModel()
+        viewModel.onAction(OnboardingAction.OnNext)
+
+        checks.access = true
+        viewModel.onAction(OnboardingAction.OnRefreshAccess)
+        // Second resume with the grant still in place must not skip the battery step.
+        viewModel.onAction(OnboardingAction.OnRefreshAccess)
+
+        assertThat(viewModel.state.value.step).isEqualTo(OnboardingStep.Battery)
+    }
+
+    @Test
+    fun `accepting notifications stores the choice and requests permission`() = runTest {
+        val viewModel = viewModel()
+        repeat(3) { viewModel.onAction(OnboardingAction.OnNext) }
 
         viewModel.events.test {
             viewModel.onAction(OnboardingAction.OnNotifyChoice(enabled = true))
@@ -74,7 +116,7 @@ class OnboardingViewModelTest {
     @Test
     fun `declining notifications stores false and skips the permission`() = runTest {
         val viewModel = viewModel()
-        repeat(2) { viewModel.onAction(OnboardingAction.OnNext) }
+        repeat(3) { viewModel.onAction(OnboardingAction.OnNext) }
 
         viewModel.events.test {
             viewModel.onAction(OnboardingAction.OnNotifyChoice(enabled = false))
@@ -101,12 +143,21 @@ class OnboardingViewModelTest {
         assertThat(settings.settings.value.onboardingCompleted).isTrue()
     }
 
-    private fun viewModel() = OnboardingViewModel(FakeDetector(), settings)
+    private fun viewModel() =
+        OnboardingViewModel(FakeDetector(), settings, checks)
 
     private class FakeDetector : PaymentAppDetector {
         override fun detectInstalledApps(): List<InstalledPaymentApp> = listOf(
             InstalledPaymentApp("com.gojek.app", PaymentSource.GOPAY, "GoPay"),
         )
+    }
+
+    private class FakeAccessChecks(
+        var access: Boolean = false,
+        var battery: Boolean = false,
+    ) : CaptureAccessChecks {
+        override fun isNotificationAccessEnabled(): Boolean = access
+        override fun isUnrestrictedByBatterySaver(): Boolean = battery
     }
 
     private class FakeSettingsRepository : SettingsRepository {

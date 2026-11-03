@@ -12,12 +12,18 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.BatterySaver
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material3.Icon
@@ -31,6 +37,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.unknownrex.sensa.core.designsystem.component.SensaCard
 import com.unknownrex.sensa.core.designsystem.component.SensaMark
@@ -60,6 +69,16 @@ fun OnboardingRoot(
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             )
 
+            // Sensa's own App info page, not the global battery list: the per-app page is where
+            // the battery setting lives on every OEM skin. No REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+            // which needs a restricted permission the direct dialog would require.
+            OnboardingEvent.OpenBatterySettings -> context.startActivity(
+                Intent(
+                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    "package:${context.packageName}".toUri(),
+                ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+
             OnboardingEvent.RequestNotificationPermission ->
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                     permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
@@ -67,6 +86,11 @@ fun OnboardingRoot(
 
             OnboardingEvent.Finished -> onFinished()
         }
+    }
+
+    // Returning from either system sheet is the only source of truth for "granted".
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        viewModel.onAction(OnboardingAction.OnRefreshAccess)
     }
 
     OnboardingScreen(state = state, onAction = viewModel::onAction)
@@ -80,18 +104,24 @@ fun OnboardingScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .windowInsetsPadding(WindowInsets.safeDrawing)
             .padding(horizontal = SensaSpacing.screen, vertical = SensaSpacing.lg),
         verticalArrangement = Arrangement.SpaceBetween,
     ) {
         StepDots(step = state.step)
 
         Box(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(vertical = SensaSpacing.md),
             contentAlignment = Alignment.Center,
         ) {
             when (state.step) {
                 OnboardingStep.Welcome -> WelcomeStep()
                 OnboardingStep.Permission -> PermissionStep(installedApps = state.installedApps)
+                OnboardingStep.Battery -> BatteryStep()
                 OnboardingStep.Notify -> NotifyStep()
                 OnboardingStep.Ready -> ReadyStep()
             }
@@ -102,22 +132,39 @@ fun OnboardingScreen(
             verticalArrangement = Arrangement.spacedBy(SensaSpacing.xs),
         ) {
             when (state.step) {
-                OnboardingStep.Welcome, OnboardingStep.Permission -> {
-                    if (state.step == OnboardingStep.Permission) {
-                        SensaPrimaryButton(
-                            onClick = { onAction(OnboardingAction.OnGrantAccess) },
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text(text = "Allow access", style = MaterialTheme.typography.labelLarge)
+                OnboardingStep.Welcome, OnboardingStep.Permission, OnboardingStep.Battery -> {
+                    when (state.step) {
+                        OnboardingStep.Permission -> {
+                            SensaPrimaryButton(
+                                onClick = { onAction(OnboardingAction.OnGrantAccess) },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Text(text = "Allow access", style = MaterialTheme.typography.labelLarge)
+                            }
+                            SensaSecondaryButton(
+                                onClick = { onAction(OnboardingAction.OnNext) },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Text(text = "Later", style = MaterialTheme.typography.labelLarge)
+                            }
                         }
-                        SensaSecondaryButton(
-                            onClick = { onAction(OnboardingAction.OnNext) },
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text(text = "Later", style = MaterialTheme.typography.labelLarge)
+
+                        OnboardingStep.Battery -> {
+                            SensaPrimaryButton(
+                                onClick = { onAction(OnboardingAction.OnRequestBatteryExemption) },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Text(text = "Allow", style = MaterialTheme.typography.labelLarge)
+                            }
+                            SensaSecondaryButton(
+                                onClick = { onAction(OnboardingAction.OnNext) },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Text(text = "Later", style = MaterialTheme.typography.labelLarge)
+                            }
                         }
-                    } else {
-                        SensaPrimaryButton(
+
+                        else -> SensaPrimaryButton(
                             onClick = { onAction(OnboardingAction.OnNext) },
                             modifier = Modifier.fillMaxWidth(),
                         ) {
@@ -253,6 +300,56 @@ private fun PermissionStep(installedApps: List<InstalledPaymentApp>) {
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BatteryStep() {
+    val colors = LocalSensaColors.current
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(SensaSpacing.md),
+    ) {
+        Icon(
+            imageVector = Icons.Outlined.BatterySaver,
+            contentDescription = null,
+            tint = colors.primary,
+            modifier = Modifier.size(48.dp),
+        )
+        Text(
+            text = "Run in the background",
+            style = MaterialTheme.typography.headlineMedium,
+            color = colors.onSurface,
+            textAlign = TextAlign.Center,
+        )
+        Text(
+            text = "Android pauses apps to save battery, and Sensa then misses payment " +
+                "notifications. Allow background usage for Sensa so it keeps running.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = colors.onSurfaceMuted,
+            textAlign = TextAlign.Center,
+        )
+
+        SensaCard(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier.padding(SensaSpacing.md),
+                verticalArrangement = Arrangement.spacedBy(SensaSpacing.xs),
+            ) {
+                Text(
+                    text = "The button opens Sensa's App info. Battery lives there under one " +
+                        "of these names: App battery usage, Battery, or Battery saver.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = colors.onSurfaceMuted,
+                )
+                Text(
+                    text = "Turn off any restriction you find. You can change it any time in " +
+                        "Settings.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = colors.onSurfaceMuted,
+                )
             }
         }
     }
