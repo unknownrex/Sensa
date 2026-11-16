@@ -5,6 +5,8 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import java.text.NumberFormat
@@ -25,8 +27,7 @@ class CaptureNotifier(private val context: Context) {
 
         val amount = "Rp" + NumberFormat.getIntegerInstance(Locale("id", "ID")).format(transaction.amountRupiah)
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-            // ponytail: system icon until a monochrome brand asset exists.
-            .setSmallIcon(android.R.drawable.stat_notify_more)
+            .setSmallIcon(R.drawable.ic_stat_capture)
             .setContentTitle(if (needsReview) "Needs review: $amount" else "Recorded: $amount")
             .setContentText(transaction.merchant)
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
@@ -42,7 +43,8 @@ class CaptureNotifier(private val context: Context) {
     fun keepAliveNotification(): Notification {
         ensureKeepAliveChannel()
         return NotificationCompat.Builder(context, KEEP_ALIVE_CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.stat_notify_more)
+            .setSmallIcon(R.drawable.ic_stat_capture)
+            .setLargeIcon(largeIcon())
             .setContentTitle("Sensa is recording payments")
             .setContentText("Tap to open")
             .setOngoing(true)
@@ -52,6 +54,16 @@ class CaptureNotifier(private val context: Context) {
             .setContentIntent(launchIntent())
             .build()
     }
+
+    /** The full-colour launcher icon; only the large icon can show colour. */
+    private fun largeIcon(): Bitmap? = runCatching {
+        val icon = context.packageManager.getApplicationIcon(context.packageName)
+        val size = (48 * context.resources.displayMetrics.density).toInt()
+        Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888).also { bitmap ->
+            icon.setBounds(0, 0, size, size)
+            icon.draw(Canvas(bitmap))
+        }
+    }.getOrNull()
 
     private fun launchIntent() = context.packageManager.getLaunchIntentForPackage(context.packageName)
         ?.let {
