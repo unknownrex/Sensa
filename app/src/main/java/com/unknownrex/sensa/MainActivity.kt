@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import com.unknownrex.sensa.core.capture.NotificationAccessChecker
+import com.unknownrex.sensa.core.capture.SensaCaptureService
 import com.unknownrex.sensa.ui.SensaApp
 import org.koin.android.ext.android.inject
 
@@ -24,5 +25,7 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         // After an update the grant survives but the listener can stay unbound until reboot.
         notificationAccessChecker.reconnectIfNeeded()
+        // Re-raise the foreground service if it was killed but the listener stayed bound.
+        if (notificationAccessChecker.isEnabled()) SensaCaptureService.start(this)
     }
 }

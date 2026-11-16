@@ -1,6 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- Lets onboarding open the per-app battery-usage page directly. No runtime prompt. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- Keeps the capture process alive when the user clears recent apps. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+
     <queries>
         <package android:name="com.gojek.gopay" />
         <package android:name="com.bca.mybca.omni.android" />
@@ -11,11 +17,18 @@
             android:name=".SensaNotificationListenerService"
             android:exported="true"
             android:label="Sensa"
+            android:persistent="true"
             android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
             <intent-filter>
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
         </service>
+
+        <!-- ponytail: dataSync is the closest type; switch to specialUse if Android 15's 6h cap bites. -->
+        <service
+            android:name=".SensaCaptureService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
     </application>
 
 </manifest>

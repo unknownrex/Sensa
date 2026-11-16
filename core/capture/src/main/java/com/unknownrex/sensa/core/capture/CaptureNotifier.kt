@@ -1,5 +1,6 @@
 package com.unknownrex.sensa.core.capture
 
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -37,6 +38,21 @@ class CaptureNotifier(private val context: Context) {
         runCatching { manager.notify(transaction.id.hashCode(), notification) }
     }
 
+    /** Persistent "still capturing" notification that backs [SensaCaptureService]. */
+    fun keepAliveNotification(): Notification {
+        ensureKeepAliveChannel()
+        return NotificationCompat.Builder(context, KEEP_ALIVE_CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.stat_notify_more)
+            .setContentTitle("Sensa is recording payments")
+            .setContentText("Tap to open")
+            .setOngoing(true)
+            .setSilent(true)
+            .setShowWhen(false)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setContentIntent(launchIntent())
+            .build()
+    }
+
     private fun launchIntent() = context.packageManager.getLaunchIntentForPackage(context.packageName)
         ?.let {
             PendingIntent.getActivity(
@@ -53,7 +69,15 @@ class CaptureNotifier(private val context: Context) {
         )
     }
 
-    private companion object {
-        const val CHANNEL_ID = "capture"
+    private fun ensureKeepAliveChannel() {
+        context.getSystemService(NotificationManager::class.java).createNotificationChannel(
+            NotificationChannel(KEEP_ALIVE_CHANNEL_ID, "Background capture", NotificationManager.IMPORTANCE_LOW),
+        )
+    }
+
+    companion object {
+        const val KEEP_ALIVE_ID = 1
+        private const val CHANNEL_ID = "capture"
+        private const val KEEP_ALIVE_CHANNEL_ID = "capture_keepalive"
     }
 }

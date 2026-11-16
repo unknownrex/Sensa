@@ -56,6 +56,8 @@ class SensaNotificationListenerService : NotificationListenerService(), KoinComp
     override fun onListenerConnected() {
         connected.value = true
         Log.i(TAG, "Listener connected")
+        // Raise the foreground service only now: no persistent notification without a grant.
+        SensaCaptureService.start(this)
     }
 
     override fun onListenerDisconnected() {
