@@ -1,6 +1,7 @@
 package com.unknownrex.sensa.feature.onboarding.presentation
 
 import android.Manifest
+import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.provider.Settings
@@ -69,14 +70,13 @@ fun OnboardingRoot(
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             )
 
-            // Sensa's own App info page, not the global battery list: the per-app page is where
-            // the battery setting lives on every OEM skin. No REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-            // which needs a restricted permission the direct dialog would require.
+            // Sensa's own battery page, tried in order of how close it lands to the setting:
+            // the exemption request opens App info's battery screen on every OEM skin we checked,
+            // the global exclusion list is the AOSP fallback, App info is the last resort.
             OnboardingEvent.OpenBatterySettings -> context.startActivity(
-                Intent(
-                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                    "package:${context.packageName}".toUri(),
-                ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                batterySettingsIntents(context).firstNotNullOfOrNull { intent ->
+                    intent.takeIf { it.resolveActivity(context.packageManager) != null }
+                },
             )
 
             OnboardingEvent.RequestNotificationPermission ->
@@ -95,6 +95,18 @@ fun OnboardingRoot(
 
     OnboardingScreen(state = state, onAction = viewModel::onAction)
 }
+
+private fun batterySettingsIntents(context: Context): List<Intent> = listOf(
+    Intent(
+        Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+        "package:${context.packageName}".toUri(),
+    ),
+    Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS),
+    Intent(
+        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+        "package:${context.packageName}".toUri(),
+    ),
+).map { it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
 
 @Composable
 fun OnboardingScreen(
@@ -339,14 +351,14 @@ private fun BatteryStep() {
                 verticalArrangement = Arrangement.spacedBy(SensaSpacing.xs),
             ) {
                 Text(
-                    text = "The button opens Sensa's App info. Battery lives there under one " +
-                        "of these names: App battery usage, Battery, or Battery saver.",
+                    text = "In Sensa's App info, open Battery, then App battery usage. Pick " +
+                        "Unrestricted.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = colors.onSurfaceMuted,
                 )
                 Text(
-                    text = "Turn off any restriction you find. You can change it any time in " +
-                        "Settings.",
+                    text = "Do not pick Battery saver, Close apps after 10 mins, or Restrict. " +
+                        "You can change it any time in Settings.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = colors.onSurfaceMuted,
                 )

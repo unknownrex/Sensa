@@ -16,3 +16,5 @@ local.properties
 # Gradle and Kotlin build output in every module, including nested build-logic projects
 **/build/
 .kotlin/
+# assembleRelease writes the APK here instead of build/ when baseline profiles are on.
+app/release/
